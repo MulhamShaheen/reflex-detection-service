@@ -2,6 +2,7 @@
 
 from Reflix.templates import template
 import reflex as rx
+from ..pipelines import detector
 
 
 class State(rx.State):
@@ -26,6 +27,7 @@ class State(rx.State):
             with open(outfile, "wb") as file_object:
                 file_object.write(upload_data)
 
+            detector.save_predictions(outfile, f"media/detections/{file.filename}/")
             # Update the img var.
             self.img.append(file.filename)
 
