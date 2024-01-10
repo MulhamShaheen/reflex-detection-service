@@ -1,8 +1,18 @@
 """The main page."""
+import os
 
 from Reflix.templates import template
 import reflex as rx
 from ..pipelines import detector
+from PIL import Image
+import datetime
+from typing import TypedDict, List
+
+
+class DetectionRequest(TypedDict):
+    datetime: str
+    source: Image.Image
+    detects: list[str]
 
 
 class State(rx.State):
@@ -10,6 +20,8 @@ class State(rx.State):
 
     # The images to show.
     img: list[str]
+    detects: list[Image.Image]
+    history: list[DetectionRequest]
 
     async def handle_upload(
             self, files: list[rx.UploadFile]
@@ -22,14 +34,24 @@ class State(rx.State):
         for file in files:
             upload_data = await file.read()
             outfile = f"media/{file.filename}"
-
-            # Save the file.
+            now = datetime.datetime.now()
             with open(outfile, "wb") as file_object:
                 file_object.write(upload_data)
 
-            detector.save_predictions(outfile, f"media/detections/{file.filename}/")
-            # Update the img var.
+            detects_path = f"media/detections/{file.filename}/"
+            detector.save_predictions(outfile, detects_path)
+            detects = list(os.scandir(detects_path+"crops/person/"))
+
+            src_path = f"media/detections/{file.filename}/crops/person/"
+
             self.img.append(file.filename)
+            self.detects = [Image.open(src_path + d.name) for d in detects]
+            self.history.append({
+                "datetime": f"{now.day}.{now.month}.{now.year} {now.hour}:{now.minute}",
+                "source": Image.open(outfile),
+                "detects": [src_path + d.name for d in detects]
+            })
+            print(self.history)
 
 
 @template(route="/main", title="Main")
@@ -54,7 +76,6 @@ def main() -> rx.Component:
                 "image/png": [".png"],
                 "image/jpeg": [".jpg", ".jpeg"],
             },
-            max_files=1,
             border=f"1px dotted",
             padding="5em",
         ),
@@ -66,10 +87,9 @@ def main() -> rx.Component:
         ),
         rx.responsive_grid(
             rx.foreach(
-                State.img,
+                State.detects,
                 lambda img: rx.vstack(
                     rx.image(src=img),
-                    rx.text(img),
                 ),
             ),
             columns=[2],
